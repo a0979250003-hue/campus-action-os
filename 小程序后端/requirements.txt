@@ -1,7 +1,17 @@
+# Web 框架与上传
 fastapi
 uvicorn
 python-multipart
+
+# 文件解析
 pypdf
 python-docx
 openpyxl
 pandas
+
+# AI 调用
+httpx
+openai
+
+# 本地开发时从 .env.local 读取配置
+python-dotenv
