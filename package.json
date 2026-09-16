@@ -16,6 +16,7 @@
     "build": "tsc -p tsconfig.build.json && node scripts/copy-schemas.mjs",
     "test:built": "node scripts/test-built-protocol.mjs",
     "test:contracts": "node scripts/run-python-checks.mjs contracts",
+    "test:analyzer": "node scripts/run-python-checks.mjs analyzer",
     "test:benchmark": "node scripts/run-python-checks.mjs benchmark",
     "test:integration": "node scripts/run-python-checks.mjs integration",
     "python:syntax": "node scripts/run-python-checks.mjs syntax",

@@ -17,6 +17,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.venv/
+venv/
+
+# 小程序后端运行时目录
+小程序后端/uploads/
+小程序后端/json_data/
 benchmark/generated/
 benchmark/splits/
 benchmark/results/
