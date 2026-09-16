@@ -5,12 +5,15 @@ const commands = {
   contracts: ['-m', 'pytest', '-q', 'tests/contracts'],
   benchmark: ['-m', 'unittest', 'discover', '-s', 'tests/benchmark', '-p', 'test*.py', '-v'],
   integration: ['-m', 'pytest', '-q', 'tests/integration'],
-  syntax: ['-m', 'compileall', '-q', 'tests', 'tools'],
+  analyzer: ['-m', 'unittest', 'discover', '-s', '小程序后端/tests', '-p', 'test_*.py', '-v'],
+  syntax: ['-m', 'compileall', '-q', 'tests', 'tools', '小程序后端'],
   audit: ['tools/benchmark/cab.py', 'audit', 'benchmark/dev_samples.jsonl', '--development'],
 };
 
 const modes =
-  mode === 'all' ? ['syntax', 'contracts', 'benchmark', 'integration', 'audit'] : [mode];
+  mode === 'all'
+    ? ['syntax', 'contracts', 'benchmark', 'analyzer', 'integration', 'audit']
+    : [mode];
 const candidates =
   process.platform === 'win32'
     ? [
