@@ -12,7 +12,7 @@ M2 文本接口检查点：已在 M1 `m1-foundation-v1.0.1` 基础上建立文�
 
 ## 目录
 
-`apps/student-miniapp` 微信小程序宿主边界；`apps/admin-console` 发布/管理端边界；`services/api` 业务 API；`services/ai-parser` AI 解析服务边界；`packages/protocol` 共享协议/Schema 加载入口；`schemas/v1` 正式产品协议；`schemas/interfaces/v1` M2 文本接口包装协议；`tools/integration/mock-ai-parser` 开发专用确定性 mock；`benchmark` 数据集工具与开发样例；`docs/frozen` 冻结方案原文；`docs/adr` 架构决策；`tests` 工程测试。
+`apps/student-miniapp` 微信小程序宿主边界；`apps/admin-console` 发布/管理端边界；`services/api` 业务 API；`services/ai-parser` AI 解析服务边界；`packages/protocol` 共享协议/Schema 加载入口；`schemas/v1` 正式产品协议；`schemas/interfaces/v1` M2 文本接口包装协议；`tools/integration/mock-ai-parser` 开发专用确定性 mock；`benchmark` 数据集工具与开发样例；`小程序后端` 小程序文件上传分析原型，独立于 M2 冻结契约；`docs/frozen` 冻结方案原文；`docs/adr` 架构决策；`tests` 工程测试。
 
 ## 设计原则
 
@@ -44,7 +44,7 @@ API 默认监听 `http://localhost:3000`，可访问 `/health` 和 `/v1/capabili
 
 ## 质量命令
 
-`npm run format:check`、`npm run lint`、`npm run typecheck`、`npm run test`、`npm run build`、`npm run test:built`、`npm run test:contracts`、`npm run test:benchmark`、`npm run benchmark:audit`、`npm run schema:check`、`npm run python:syntax`、`npm run scan:secrets`、`npm run release:manifest:verify`、`npm run diff:check`，或一次运行 `npm run check`。Windows 下 Python 命令由脚本自动选择 `py -3`，Unix 下选择 `python3`/`python`；CI 与 `npm run check` 保持一致。
+`npm run format:check`、`npm run lint`、`npm run typecheck`、`npm run test`、`npm run build`、`npm run test:built`、`npm run test:contracts`、`npm run test:analyzer`、`npm run test:benchmark`、`npm run benchmark:audit`、`npm run schema:check`、`npm run python:syntax`、`npm run scan:secrets`、`npm run release:manifest:verify`、`npm run diff:check`，或一次运行 `npm run check`。Windows 下 Python 命令由脚本自动选择 `py -3`，Unix 下选择 `python3`/`python`；CI 与 `npm run check` 保持一致。
 
 ## 测试层次
 
