@@ -1,6 +1,7 @@
 <view class="page">
   <view class="eyebrow">ACTION RESULT / 03</view>
   <view class="title">这条通知与你有关</view>
+  <view class="card mock-banner" wx:if="{{origin === 'mock'}}"><view class="row"><text class="tag red">示例数据</text><text class="caption">不是你的通知的解析结果</text></view><view class="muted mock-banner-text">{{mockProvenance.notice}}</view><view class="source" wx:if="{{mockProvenance.matched}}">命中关键词「{{mockProvenance.keyword}}」</view></view>
   <view class="result-sub" wx:if="{{actionView}}"><status-badge label="{{actionView.statusLabel}}" tone="{{actionView.statusTone}}"></status-badge><text class="muted">字段均来自 VerifiedActionObject</text></view>
   <view class="card relevance" wx:if="{{assessment}}"><view class="caption">PERSONAL RELEVANCE</view><view class="relevance-text">{{assessment.relevance_reason}}</view></view>
   <view wx:if="{{orchestration}}">

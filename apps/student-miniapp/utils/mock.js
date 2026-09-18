@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'campusActionMockState';
 const STATE_VERSION = 4;
 const RELATION_TYPES = ['depends_on', 'blocks', 'same_event', 'conflicts_with', 'revises'];
+const MOCK_ORIGIN = 'mock';
 
 const scenarios = {
   student: {
@@ -63,7 +64,28 @@ function writeState(state) { wx.setStorageSync(STORAGE_KEY, state); return state
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function uniqueId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function findAction(actionId) { for (const item of Object.values(scenarios)) { const found = item.actions.find((action) => action.action_id === actionId); if (found) return clone(found); } return null; }
-function pickScenario(text) { if (/成绩单|2个工作日|行动编排/.test(text)) return 'orchestration'; if (/延期|延长|创新训练/.test(text)) return 'extension'; if (/奖学金/.test(text)) return 'scholarship'; return 'student'; }
+// 命中情况必须显式返回。旧实现匹配不上就直接 `return 'student'`，
+// 调用方无法区分"命中兜底场景"和"什么都没匹配上"，
+// 于是无论用户输入什么通知，拿到的都是同一份示例，而且没有任何提示。
+const SCENARIO_RULES = [
+  { scenario: 'orchestration', pattern: /成绩单|2个工作日|行动编排/ },
+  { scenario: 'extension', pattern: /延期|延长|创新训练/ },
+  { scenario: 'scholarship', pattern: /奖学金/ },
+];
+
+function pickScenario(text) {
+  const source = typeof text === 'string' ? text : '';
+  for (const rule of SCENARIO_RULES) {
+    const hit = source.match(rule.pattern);
+    if (hit) return { scenario: rule.scenario, matched: true, keyword: hit[0] };
+  }
+  return {
+    scenario: 'student',
+    matched: false,
+    keyword: null,
+    reason: '文本未命中任何示例场景关键词。',
+  };
+}
 
 module.exports = {
   resetDemoState() { return Promise.resolve(clone(writeState(baselineState()))); },
@@ -84,10 +106,57 @@ module.exports = {
   getPendingChanges() { const state = readState(); const changes = state.changeEvents.filter((event) => event.status === 'pending').map((event) => { const task = state.tasks.find((item) => item.task_id === event.task_id) || null; return { ...clone(event), task_id: event.task_id, task_title: task ? task.title : event.title }; }); return Promise.resolve({ changes }); },
   getOrchestrationSummary() { const state = readState(); const scenario = state.activeScenario === 'orchestration' ? scenarios.orchestration : null; return Promise.resolve({ suggestion: scenario ? clone(scenario.priority_suggestion) : null, conflict: scenario ? clone(scenario.conflicts.find((item) => item.status === 'unresolved') || null) : null, relations: scenario ? clone(scenario.relations) : [], relation_types: clone(RELATION_TYPES), change_impacts: scenario ? clone(scenario.change_impacts) : [] }); },
   getOrchestrationResult() { const scenario = scenarios.orchestration; return Promise.resolve({ document_assessment: clone(scenario.assessment), verified_actions: clone(scenario.actions.slice(0, 3)), orchestration_actions: clone(scenario.actions.slice(0, 3)), source_text: scenario.source, scenario: 'orchestration', orchestration: true, relations: clone(scenario.relations), relation_types: clone(RELATION_TYPES), priority_suggestion: clone(scenario.priority_suggestion), conflicts: clone(scenario.conflicts), change_impacts: clone(scenario.change_impacts) }); },
-  createDocument(text) { const state = readState(); const id = uniqueId('doc'); const scenario = pickScenario(text); state.documents[id] = { document_id: id, text, scenario }; writeState(state); return Promise.resolve({ document: clone(state.documents[id]) }); },
+  createDocument(text) {
+    const state = readState();
+    const id = uniqueId('doc');
+    const picked = pickScenario(text);
+    state.documents[id] = {
+      document_id: id,
+      text,
+      scenario: picked.scenario,
+      scenario_matched: picked.matched,
+      scenario_keyword: picked.keyword,
+      scenario_reason: picked.reason || '',
+    };
+    writeState(state);
+    return Promise.resolve({ document: clone(state.documents[id]) });
+  },
   uploadMediaDocument() { return this.createDocument(scenarios.student.source); },
   parseDocument(documentId) { const state = readState(); const jobId = uniqueId('job'); state.jobs[jobId] = { parse_job_id: jobId, document_id: documentId, status: 'queued', result: null }; state.pollCount[jobId] = 0; writeState(state); return Promise.resolve(clone(state.jobs[jobId])); },
-  getParseJob(jobId) { const state = readState(); const job = state.jobs[jobId]; if (!job) return Promise.reject(new Error('job not found')); state.pollCount[jobId] += 1; if (state.pollCount[jobId] >= 2) { const document = state.documents[job.document_id] || {}; const scenarioName = document.scenario || 'student'; const scenario = scenarios[scenarioName] || scenarios.student; const actions = scenarioName === 'orchestration' ? scenario.actions.slice(0, 3) : scenario.actions; job.status = 'succeeded'; job.result = { document_assessment: clone(scenario.assessment), verified_actions: clone(actions), orchestration_actions: clone(actions), source_text: scenario.source, scenario: scenarioName, orchestration: scenarioName === 'orchestration', relations: clone(scenario.relations || []), relation_types: clone(RELATION_TYPES), priority_suggestion: clone(scenario.priority_suggestion || null), conflicts: clone(scenario.conflicts || []), change_impacts: clone(scenario.change_impacts || []) }; } writeState(state); return Promise.resolve(clone(job)); },
+  getParseJob(jobId) {
+    const state = readState();
+    const job = state.jobs[jobId];
+    if (!job) return Promise.reject(new Error('job not found'));
+    state.pollCount[jobId] += 1;
+    if (state.pollCount[jobId] >= 2) {
+      const document = state.documents[job.document_id] || {};
+      const scenarioName = document.scenario || 'student';
+      const scenario = scenarios[scenarioName] || scenarios.student;
+      const actions =
+        scenarioName === 'orchestration' ? scenario.actions.slice(0, 3) : scenario.actions;
+      job.status = 'succeeded';
+      job.result = {
+        document_assessment: clone(scenario.assessment),
+        verified_actions: clone(actions),
+        orchestration_actions: clone(actions),
+        source_text: scenario.source,
+        scenario: scenarioName,
+        orchestration: scenarioName === 'orchestration',
+        relations: clone(scenario.relations || []),
+        relation_types: clone(RELATION_TYPES),
+        priority_suggestion: clone(scenario.priority_suggestion || null),
+        conflicts: clone(scenario.conflicts || []),
+        change_impacts: clone(scenario.change_impacts || []),
+        // 结果自带来源说明，并把用户原始输入一并带出：
+        // 页面可以直接把"你输入的内容"和"示例内容"摆在一起对照。
+        data_origin: MOCK_ORIGIN,
+        mock: scenarioProvenance(document),
+        input_text: document.text || '',
+      };
+    }
+    writeState(state);
+    return Promise.resolve(clone(job));
+  },
   confirmAction(actionId) { return Promise.resolve({ action: { action_id: actionId, verification_status: 'confirmed' } }); },
   rejectAction() { return Promise.resolve({ ok: true }); },
   createTask(actionId) { const state = readState(); const action = findAction(actionId); if (!action) return Promise.reject(new Error('action not found')); let task = state.tasks.find((item) => item.action_id === actionId); if (!task) { task = { task_id: uniqueId('task'), title: action.title, status: 'pending', due_at: action.deadline.value, due_display: action.deadline.display, home_bucket: action.action_id === 'action-scholarship' ? 'upcoming' : 'today', platform: action.platform, source: action.source, action_id: action.action_id }; state.tasks.unshift(task); } writeState(state); return Promise.resolve({ task: clone(task) }); },
@@ -103,3 +172,49 @@ module.exports = {
   updateProfile(data) { return Promise.resolve({ profile: data }); },
   exportUserData() { return Promise.resolve(readState()); },
 };
+
+function scenarioProvenance(document) {
+  const name = (document && document.scenario) || 'student';
+  const scenario = scenarios[name] || scenarios.student;
+  const matched = Boolean(document && document.scenario_matched);
+  const keyword = (document && document.scenario_keyword) || null;
+  return {
+    scenario: name,
+    label: scenario.label,
+    matched,
+    keyword,
+    fallback_reason: matched ? '' : (document && document.scenario_reason) || '',
+    notice: matched
+      ? `示例数据：文本命中关键词「${keyword}」，返回示例场景「${scenario.label}」。内容来自本地示例文件，不是你的通知的解析结果。`
+      : `示例数据：文本未命中任何示例场景关键词，返回兜底示例「${scenario.label}」。这份内容与你的通知无关。`,
+  };
+}
+
+// 示例数据的来源标记。任何 mock 出口都必须带上它，
+// 页面才可能如实提示"这不是你的通知生成的结果"。
+function tag(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  if (payload.data_origin === MOCK_ORIGIN) return payload;
+  return Object.assign({}, payload, { data_origin: MOCK_ORIGIN });
+}
+
+// 逐个函数手写标记容易漏。这里在模块边界统一包一层，
+// 保证任何 mock 返回值都带 data_origin，示例数据无法伪装成真实结果。
+const mockApi = module.exports;
+const taggedApi = {};
+for (const [name, value] of Object.entries(mockApi)) {
+  if (typeof value !== 'function') {
+    taggedApi[name] = value;
+    continue;
+  }
+  taggedApi[name] = function tagged(...args) {
+    let result;
+    try {
+      result = value.apply(taggedApi, args);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return Promise.resolve(result).then(tag);
+  };
+}
+module.exports = taggedApi;

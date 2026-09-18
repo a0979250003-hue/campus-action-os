@@ -7,6 +7,9 @@ Page({
     actions: [],
     resultReady: false,
     error: '',
+    errorCode: '',
+    origin: '',
+    mockProvenance: null,
     canManual: false,
     manualTitle: '',
     manualDueAt: '',
@@ -51,7 +54,12 @@ Page({
             job.status,
           ),
           canManual: job.status === 'failed',
+          // 如实记录数据来源。示例数据必须能被页面识别出来，
+          // 否则用户无法区分"解析结果"和"打包在客户端的示例"。
+          origin: api.dataOrigin(job),
+          mockProvenance: api.mockProvenance(job),
           error: '',
+          errorCode: '',
         });
         const next = ['succeeded', 'partial', 'needs_confirmation'].includes(job.status)
           ? this.data.steps.length
@@ -71,14 +79,15 @@ Page({
         if (['queued', 'running'].includes(job.status))
           this.timer = setTimeout(() => this.loadJob(), 1000);
       })
-      .catch((error) =>
+      .catch((error) => {
+        // 不再把失败统一压成一句模板文案：错误码要原样透出，
+        // 否则分不清"请求没发出去"和"后端解析器没配置"。
+        const normalized = api.normalizeError(error);
         this.setData({
-          error:
-            error && error.error && error.error.code === 'NETWORK_ERROR'
-              ? '解析服务连接失败，请检查 API 地址。'
-              : '解析任务读取失败，请稍后重试。',
-        }),
-      );
+          error: normalized.message,
+          errorCode: normalized.code + (normalized.status ? ` · HTTP ${normalized.status}` : ''),
+        });
+      });
   },
   setStep(index) {
     const steps = this.data.steps.map((step, current) => ({

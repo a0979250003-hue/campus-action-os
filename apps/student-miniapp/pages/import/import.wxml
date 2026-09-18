@@ -2,6 +2,7 @@
   <view class="eyebrow">IMPORT / 01</view>
   <view class="title">把通知丢进来，<br/>剩下的交给我们。</view>
   <view class="muted intro">文字、截图或 PDF 都可以。我们会把它编译成你的行动。</view>
+  <view class="card mock-banner" wx:if="{{mockMode}}"><view class="row"><text class="tag red">示例模式已开启</text><text class="caption">结果与输入无关</text></view><view class="muted mock-banner-text">当前 useMock=true，后面显示的是打包在客户端的示例数据，不是你这条通知的解析结果。要跑真实解析，请在 app.js 把 useMock 改为 false 并启动后端服务。</view></view>
   <view class="input-tabs"><view class="input-tab active">粘贴文字</view><view class="input-tab">截图</view><view class="input-tab">PDF</view><view class="input-tab disabled">录音</view></view>
   <textarea class="notice-input" value="{{text}}" placeholder="在这里粘贴校园通知原文" maxlength="100000" bindinput="onInput" />
   <view class="source-hint" wx:if="{{scenarioLabel}}"><text class="tag blue">示例通知</text> {{scenarioLabel}}</view>
@@ -17,6 +18,7 @@
   </view>
   <button class="button" loading="{{loading}}" disabled="{{loading}}" bindtap="submit">开始编译行动 →</button>
   <view class="danger" wx:if="{{error}}">{{error}}</view>
+  <view class="caption" wx:if="{{errorCode}}">错误码：{{errorCode}}</view>
   <view class="card" wx:if="{{canManual}}">
     <view class="title">解析失败后的人工建任务</view>
     <view class="muted">原文和文件仍保留在当前文档中。只有你点击确认后，才会落库为人工任务。</view>

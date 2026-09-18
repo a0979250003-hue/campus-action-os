@@ -8,3 +8,5 @@
 .sample-title { color: #59647a; font-size: 25rpx; margin-top: 38rpx; }
 .sample-row { display: flex; gap: 14rpx; margin: 16rpx 0 10rpx; }
 .sample-chip { background: #fff; border: 1rpx solid #e1e5ef; border-radius: 14rpx; color: #3047b8; flex: 1; padding: 16rpx 8rpx; text-align: center; }
+.mock-banner { border-left: 6rpx solid #c34850; }
+.mock-banner-text { line-height: 1.7; margin-top: 12rpx; }

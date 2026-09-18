@@ -24,3 +24,5 @@
 .relation-card { margin-top: 18rpx; padding: 24rpx 28rpx; }
 .relation-card .body-copy { margin-top: 14rpx; }
 .orchestration-conflict { background: #fff8f5; border-color: #f0c4b8; margin-top: 24rpx; }
+.mock-banner { border-left: 6rpx solid #c34850; }
+.mock-banner-text { margin-top: 12rpx; }

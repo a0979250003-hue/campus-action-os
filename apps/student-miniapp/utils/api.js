@@ -1,10 +1,33 @@
+// 数据来源标记：真实 API 结果与本地示例数据必须可区分。
+// 没有这个标记，页面无法判断"看到的是解析结果还是示例"，
+// 这正是"点了生成却出现示例内容、又看不出为什么"的根源。
+const DATA_ORIGIN_API = 'api';
+const DATA_ORIGIN_MOCK = 'mock';
+
+let mockWarningEmitted = false;
+function warnMockOnce() {
+  if (mockWarningEmitted) return;
+  mockWarningEmitted = true;
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn(
+      '[campus-action-os] useMock=true：当前返回本地示例数据，与输入内容无关。正式验收请把 app.js 的 useMock 置为 false。',
+    );
+  }
+}
+
 function appConfig() {
   const app = getApp();
+  const globalData = (app && app.globalData) || {};
+  // 严格等于 true 才算开启示例模式。
+  // 旧写法 Boolean(globalData.useMock) 会把字符串 'false' 判成真值，
+  // 一次配置失误就会让整个应用悄悄跑在示例数据上且毫无提示。
+  const useMock = globalData.useMock === true;
+  if (useMock) warnMockOnce();
   return {
-    baseUrl: (app && app.globalData.apiBaseUrl) || 'http://127.0.0.1:3000',
-    userId: (app && app.globalData.userId) || 'dev-user',
-    useMock: Boolean(app && app.globalData.useMock),
-    demoMode: Boolean(app && app.globalData.demoMode),
+    baseUrl: globalData.apiBaseUrl || 'http://127.0.0.1:3000',
+    userId: globalData.userId || 'dev-user',
+    useMock,
+    demoMode: globalData.demoMode === true,
   };
 }
 
@@ -20,6 +43,64 @@ function unsupportedRealCapability(capability) {
       capability,
     }),
   );
+}
+
+function tagOrigin(payload, origin) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  if (payload.data_origin === origin) return payload;
+  return Object.assign({}, payload, { data_origin: origin });
+}
+
+// 来源标记可能挂在 payload 顶层，也可能在 payload.result 里，
+// 两条路径都要认，否则页面会漏判并退回"看不出来源"的状态。
+function dataOrigin(payload) {
+  if (!payload || typeof payload !== 'object') return 'unknown';
+  if (payload.data_origin) return payload.data_origin;
+  if (payload.result && payload.result.data_origin) return payload.result.data_origin;
+  return 'unknown';
+}
+
+function mockProvenance(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.mock) return payload.mock;
+  if (payload.result && payload.result.mock) return payload.result.mock;
+  return null;
+}
+
+function httpError(response) {
+  const body = response.data && response.data.error ? response.data.error : null;
+  const statusCode = response.statusCode;
+  if (body) {
+    return {
+      error: Object.assign({}, body, {
+        details: Object.assign({}, body.details || {}, { status_code: statusCode }),
+      }),
+    };
+  }
+  return apiError('HTTP_ERROR', `服务端返回 HTTP ${statusCode}。`, { status_code: statusCode });
+}
+
+// 错误码映射成能指导下一步动作的说明。
+// 旧实现把任何失败都压成"解析任务读取失败，请稍后重试"，
+// 于是"请求没发出去""解析器没配置""域名被拦"全长得一模一样，根本没法排查。
+const ERROR_HINTS = {
+  NETWORK_ERROR: '无法连接解析服务。请确认 API 地址可访问；微信开发者工具需勾选「不校验合法域名」。',
+  PARSER_NOT_CONFIGURED: '后端解析器未配置（HTTP 503 PARSER_NOT_CONFIGURED），无法生成真实解析结果。',
+  REAL_API_NOT_AVAILABLE: '该能力目前没有可用的学生端真实 API。',
+  HTTP_ERROR: '服务端返回了错误响应。',
+};
+
+function normalizeError(error) {
+  const body = (error && error.error) || {};
+  const details = body.details || {};
+  const code = body.code || (error && error.code) || 'UNKNOWN_ERROR';
+  const status = details.status_code || details.statusCode || null;
+  return {
+    code,
+    status,
+    message: ERROR_HINTS[code] || body.message || '请求失败，请稍后重试。',
+    server_message: body.message || '',
+  };
 }
 
 function enrichTask(task, action) {
@@ -55,10 +136,10 @@ function request(path, options) {
       },
       success(response) {
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          resolve(response.data);
+          resolve(tagOrigin(response.data, DATA_ORIGIN_API));
           return;
         }
-        reject(response.data || { error: { code: 'HTTP_ERROR', message: 'Request failed' } });
+        reject(httpError(response));
       },
       fail(error) {
         reject(apiError('NETWORK_ERROR', '无法连接真实 API。', error));
@@ -324,16 +405,19 @@ module.exports = {
       const event = (result.sync || []).find((item) => item.sync_event_id === changeEventId);
       if (!event)
         return Promise.reject(apiError('SYNC_EVENT_NOT_FOUND', '待处理的通知变化不存在。'));
-      return {
-        ...event,
-        change_event_id: event.sync_event_id,
-        task_id: this._diffTaskId,
-        title: '关联通知发生变化',
-        source: '关联通知',
-        fields: [],
-        impacts: [],
-        details_available: false,
-      };
+      return tagOrigin(
+        {
+          ...event,
+          change_event_id: event.sync_event_id,
+          task_id: this._diffTaskId,
+          title: '关联通知发生变化',
+          source: '关联通知',
+          fields: [],
+          impacts: [],
+          details_available: false,
+        },
+        DATA_ORIGIN_API,
+      );
     });
   },
   applyNotificationDiff(changeEventId) {
@@ -355,6 +439,16 @@ module.exports = {
   isDemoMode() {
     return appConfig().useMock && appConfig().demoMode;
   },
+  isMockMode() {
+    return appConfig().useMock;
+  },
+  dataOrigin,
+  mockProvenance,
+  normalizeError,
+  isMockPayload(payload) {
+    return dataOrigin(payload) === DATA_ORIGIN_MOCK;
+  },
+  dataOrigins: { API: DATA_ORIGIN_API, MOCK: DATA_ORIGIN_MOCK },
 };
 
 

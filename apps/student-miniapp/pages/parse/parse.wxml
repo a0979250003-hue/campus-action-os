@@ -9,6 +9,7 @@
       <view class="loading-step" wx:for="{{steps}}" wx:key="label"><text class="step-mark {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}">{{item.done ? '✓' : item.active ? '·' : '○'}}</text><text class="{{item.active ? 'step-active' : ''}}">{{item.label}}</text></view>
     </view>
   </view>
+  <view class="card mock-banner" wx:if="{{origin === 'mock'}}"><view class="row"><text class="tag red">示例数据</text><text class="caption">不是解析结果</text></view><view class="muted mock-banner-text">{{mockProvenance.notice}}</view><view class="source" wx:if="{{mockProvenance.matched}}">命中关键词「{{mockProvenance.keyword}}」</view><view class="source">示例内容与你粘贴的通知无关，请勿据此判断解析能力。</view></view>
   <view class="card error-card" wx:if="{{job.error}}"><view class="danger">解析遇到问题</view><view class="muted">{{job.error.message}}</view></view>
   <view class="card" wx:if="{{canManual}}">
     <view class="title">解析失败后的人工建任务</view>
@@ -18,4 +19,5 @@
     <button class="button" bindtap="manualCreate">确认创建人工任务</button>
   </view>
   <view class="danger" wx:if="{{error}}">{{error}}</view>
+  <view class="caption" wx:if="{{errorCode}}">错误码：{{errorCode}}</view>
 </view>

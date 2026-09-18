@@ -15,6 +15,8 @@ Page({
     manualTitle: '',
     manualDueAt: '',
     demoMode: api.isDemoMode(),
+    mockMode: api.isMockMode(),
+    errorCode: '',
   },
   onLoad(options) {
     if (options && options.scenario) {
@@ -84,7 +86,7 @@ Page({
       this.setData({ error: '请先粘贴通知原文，或选择 PNG/JPEG/PDF/WAV 文件。' });
       return;
     }
-    this.setData({ loading: true, error: '' });
+    this.setData({ loading: true, error: '', errorCode: '' });
     if (this.data.filePath && this.data.fileType === 'audio/wav') {
       api
         .uploadAudioDocument(this.data.filePath, this.data.fileType, this.data.fileName)
@@ -93,15 +95,17 @@ Page({
             url: `/pages/parse/parse?jobId=${result.parse_job.parse_job_id}&audioId=${result.audio.audio_id}`,
           }),
         )
-        .catch((error) =>
+        .catch((error) => {
+          const normalized = api.normalizeError(error);
           this.setData({
             loading: false,
             error:
-              error && error.error && error.error.code === 'NETWORK_ERROR'
+              normalized.code === 'NETWORK_ERROR'
                 ? '导入失败，请检查 API 地址与网络。'
-                : '语音识别失败，请确认 WAV 文件与本地识别服务可用。',
-          }),
-        );
+                : `语音识别失败，请确认 WAV 文件与本地识别服务可用。（${normalized.code}）`,
+            errorCode: normalized.code + (normalized.status ? ` · HTTP ${normalized.status}` : ''),
+          });
+        });
       return;
     }
     api[this.data.filePath ? 'uploadMediaDocument' : 'createDocument'](
@@ -125,17 +129,19 @@ Page({
         }
         wx.redirectTo({ url: `/pages/parse/parse?jobId=${job.parse_job_id}` });
       })
-      .catch((error) =>
+      .catch((error) => {
+        const normalized = api.normalizeError(error);
         this.setData({
           loading: false,
           canManual: Boolean(this.data.documentId),
+          // 保留"原文已保留"这条已有信息，同时把真实错误码透出：
+          // 所有失败都压成同一句话时，没法区分网络、域名白名单和解析器未配置。
           error: this.data.documentId
-            ? '解析失败，原文已保留；你仍可人工创建任务。'
-            : error && error.error && error.error.code === 'NETWORK_ERROR'
-              ? '导入失败，请检查 API 地址与网络。'
-              : '导入失败，请稍后重试。',
-        }),
-      );
+            ? `解析失败，原文已保留；你仍可人工创建任务。（${normalized.code}）`
+            : normalized.message,
+          errorCode: normalized.code + (normalized.status ? ` · HTTP ${normalized.status}` : ''),
+        });
+      });
   },
   manualCreate() {
     const title = (this.data.manualTitle || '').trim();

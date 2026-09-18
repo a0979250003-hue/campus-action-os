@@ -10,3 +10,5 @@
 .step-mark.active { color: #3047b8; font-size: 40rpx; line-height: 22rpx; }
 .step-active { color: #3047b8; font-weight: 700; }
 .error-card { border-left: 6rpx solid #c34850; }
+.mock-banner { border-left: 6rpx solid #c34850; }
+.mock-banner-text { margin-top: 12rpx; }

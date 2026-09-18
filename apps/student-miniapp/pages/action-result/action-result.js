@@ -36,6 +36,8 @@ Page({
     loading: true,
     creating: false,
     error: '',
+    origin: '',
+    mockProvenance: null,
     orchestration: false,
     orchestrationActions: [],
     relations: [],
@@ -68,9 +70,16 @@ Page({
           prioritySuggestion: result.priority_suggestion || null,
           conflicts: result.conflicts || [],
           changeImpacts: result.change_impacts || [],
+          // 结果页是最容易把示例数据误当真实结果的地方（用户就是在这里看到"行动图"）。
+          // 来源标记必须在刷新结果时一并落到页面上。
+          origin: api.dataOrigin(payload),
+          mockProvenance: api.mockProvenance(payload),
         });
       })
-      .catch(() => this.setData({ loading: false, error: '行动结果读取失败，请重试。' }));
+      .catch((error) => {
+        const normalized = api.normalizeError(error);
+        this.setData({ loading: false, error: normalized.message });
+      });
   },
   openEvidence() {
     if (this.data.action)
