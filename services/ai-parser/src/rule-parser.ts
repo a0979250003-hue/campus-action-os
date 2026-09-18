@@ -127,12 +127,48 @@ function naturalDeadline(
   return { value: iso, precision, boundary: 'before', ambiguous: !timeMatch };
 }
 
-function isoDeadline(line: string | undefined, reference: string): {
+type DeadlineReading = {
   value: string | null;
   precision: VerifiedActionObject['deadline']['precision'];
   boundary: VerifiedActionObject['deadline']['boundary_semantics'];
   ambiguous: boolean;
-} {
+};
+
+function boundaryOf(line: string): VerifiedActionObject['deadline']['boundary_semantics'] {
+  if (/截至|不晚于/u.test(line)) return 'no_later_than';
+  if (/之后|以后/u.test(line)) return 'after';
+  if (/当天|当日/u.test(line)) return 'on';
+  return 'before';
+}
+
+// 通知里常写“9月17日 20:00”而不写年份（原实现要求四位年份，于是把报名截止整条丢掉）。
+// 这里按参考时间的年份补全；若据此推出的日期已过去，则标为有歧义，交给用户确认。
+function yearlessDeadline(match: RegExpMatchArray, line: string, reference: string): DeadlineReading {
+  const referenceDate = new Date(reference);
+  if (Number.isNaN(referenceDate.getTime()))
+    return { value: null, precision: 'unknown', boundary: 'unknown', ambiguous: true };
+  const shanghaiReference = new Date(referenceDate.getTime() + 8 * 60 * 60 * 1000);
+  const [, rawMonth, rawDay, rawHour, rawMinute] = match;
+  const date = `${shanghaiReference.getUTCFullYear()}-${rawMonth.padStart(2, '0')}-${rawDay.padStart(2, '0')}`;
+  if (Number.isNaN(new Date(`${date}T12:00:00+08:00`).getTime()))
+    return { value: null, precision: 'unknown', boundary: 'unknown', ambiguous: true };
+  if (rawHour === undefined)
+    return {
+      value: date,
+      precision: 'day',
+      boundary: boundaryOf(line),
+      ambiguous: new Date(`${date}T23:59:00+08:00`).getTime() < referenceDate.getTime(),
+    };
+  const value = `${date}T${rawHour.padStart(2, '0')}:${rawMinute}:00+08:00`;
+  return {
+    value,
+    precision: 'minute',
+    boundary: boundaryOf(line),
+    ambiguous: new Date(value).getTime() < referenceDate.getTime(),
+  };
+}
+
+function isoDeadline(line: string | undefined, reference: string): DeadlineReading {
   if (!line || /尽快|另行通知|待确认|工作日/.test(line)) {
     return { value: null, precision: 'unknown', boundary: 'unknown', ambiguous: Boolean(line) };
   }
@@ -143,20 +179,18 @@ function isoDeadline(line: string | undefined, reference: string): {
     const natural = line.match(
       /(?:今天|今晚|今早|明天|后天|(?:本周|这周|下周)[一二三四五六日天]|周[一二三四五六日天])(?:早上|上午|中午|下午|晚上)?(?:\d{1,2}(?::\d{2})?点?(?:\d{1,2}分)?)?/u,
     )?.[0];
-    return natural
-      ? naturalDeadline(natural, reference)
+    if (natural) return naturalDeadline(natural, reference);
+    const yearless = line.match(
+      /(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:[ T]?(\d{1,2})\s*[:：]\s*(\d{2}))?/u,
+    );
+    return yearless
+      ? yearlessDeadline(yearless, line, reference)
       : { value: null, precision: 'unknown', boundary: 'unknown', ambiguous: false };
   }
   const [, year, month, day, hour, minute] = match;
   const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   const value = hour === undefined ? date : `${date}T${hour.padStart(2, '0')}:${minute}:00+08:00`;
-  const boundary = /截至|不晚于/.test(line)
-    ? 'no_later_than'
-    : /之后|以后/.test(line)
-      ? 'after'
-      : /当天|当日/.test(line)
-        ? 'on'
-        : 'before';
+  const boundary = boundaryOf(line);
   return {
     value,
     precision: hour === undefined ? 'day' : 'minute',
@@ -167,21 +201,67 @@ function isoDeadline(line: string | undefined, reference: string): {
 
 type ActionInput = { text: string; line: string; spoken?: SpokenActionCandidate };
 
+// 书面通知的中文编号（（1）（一）①②等）、半角编号与项目符号。原实现只认 “\d+.” 一种，
+// 导致中文编号的通知一条都匹配不上，整体掉进为语音转写设计的切分逻辑。
+const actionMarker =
+  /^(?:[（(]\s*(?:\d{1,3}|[一二三四五六七八九十]{1,3})\s*[）)]|\d{1,3}\s*[.、)]|[一二三四五六七八九十]{1,3}\s*[.、)]|[①②③④⑤⑥⑦⑧⑨⑩]|[-*•])\s*(.+)$/u;
+// 带年份或不带年份的日期表达式：2026年9月19日 / 9月17日 / 2026-09-19。
+const dateExpression =
+  /(?:20\d{2}\s*[-年]\s*\d{1,2}\s*(?:[-月]\s*\d{1,2}\s*日)?)|(?:\d{1,2}\s*月\s*\d{1,2}\s*日)/u;
+// 判断一行是否“值得成为一个行动”，用于把标题/小节名与真正的指令区分开。
+const actionVerb =
+  /请|需|须|务必|应当|报名|填写|填报|提交|上交|上传|确认|参加|参与|完成|发送|缴费|领取|联系|加入|扫码|关注|携带|准备|拍摄|服从|接受|具备|更新|核对|打印|下载|登录|交|填|传|发|做|拿/u;
+const headingTail = /[：:]\s*$/u;
+const headingWords =
+  /^(?:活动时间|活动安排|活动简介|志愿岗位|招募说明|招募对象|招募要求|报名方式|报名渠道|联系方式|注意事项|其他|说明|须知|流程|岗位要求|岗位职责|工作内容|时间安排|材料清单)$/u;
+// 语音转写里不会出现明确的日历日期（“9月17日”“2026年9月19日”），用的是“周三/明天/今晚”这类相对表达。
+// 一旦原文出现明确日历日期，就按书面通知处理，避免把书面语句按口语的动词位置切碎重组。
+const explicitCalendarDate =
+  /(?:\d{1,2}\s*月\s*\d{1,2}\s*日)|(?:20\d{2}\s*[-年]\s*\d{1,2})/u;
+const directiveStart = /^(?:请|需|须|务必|应当)/u;
+
+function isHeadingLike(text: string): boolean {
+  if (headingTail.test(text)) return true;
+  const stripped = text.replace(headingTail, '').trim();
+  if (!stripped) return true;
+  if (headingWords.test(stripped)) return true;
+  return stripped.length <= 6 && !actionVerb.test(stripped);
+}
+
+function hasDateExpression(line: string): boolean {
+  return dateExpression.test(line);
+}
+
+function spokenSplitIsSafe(text: string): boolean {
+  return !explicitCalendarDate.test(text);
+}
+
 function findActions(
   lines: string[],
   spoken: ReturnType<typeof normalizeSpokenText>,
+  looksSpoken: boolean,
 ): ActionInput[] {
-  const numbered = lines
-    .map((line) => ({ line, match: line.trim().match(/^(?:\d+[.)、]|[-*])\s*(.+)$/) }))
+  const marked = lines
+    .map((line) => ({ line, match: line.trim().match(actionMarker) }))
     .filter((item): item is { line: string; match: RegExpMatchArray } => Boolean(item.match))
-    .map(({ line, match }) => ({ text: match[1].trim(), line }));
-  if (numbered.length > 0) return numbered;
-  if (spoken.candidates.length > 0)
+    .map(({ line, match }) => ({ text: match[1].trim(), line }))
+    .filter(({ text }) => !isHeadingLike(text));
+  // 没有编号、但以“请/需/务必”开头的行同样是明确指令（例如“报名方式”下面那一句）。
+  const directives = lines
+    .filter((line) => !line.trim().match(actionMarker))
+    .map((line) => ({ text: line.trim(), line: line.trim() }))
+    .filter(({ text }) => !isHeadingLike(text) && directiveStart.test(text));
+  if (marked.length > 0) {
+    const seen = new Set(marked.map((item) => item.line));
+    return [...marked, ...directives.filter((item) => !seen.has(item.line))];
+  }
+  if (looksSpoken && spoken.candidates.length > 0)
     return spoken.candidates.map((candidate) => ({
       text: candidate.action_text,
       line: candidate.source_text,
       spoken: candidate,
     }));
+  if (directives.length > 0) return directives;
   return lines
     .filter(
       (line) =>
@@ -204,12 +284,16 @@ function evidence(id: string, sourceText: string, fieldName: Evidence['field_nam
 
 function deadlineLineForAction(
   actionLine: string,
-  actionIndex: number,
+  allLines: string[],
   deadlineLines: string[],
 ): string | undefined {
-  if (/截止|截至|报名时间|20\d{2}[-年]/.test(actionLine)) return actionLine;
-  if (deadlineLines.length === 1) return deadlineLines[0];
-  return deadlineLines[actionIndex];
+  if (/截止|截至|报名时间/u.test(actionLine) || hasDateExpression(actionLine)) return actionLine;
+  const position = allLines.indexOf(actionLine);
+  // 通知里的时间行通常写在被修饰的指令之后；后面找不到就退回之前最近的一条。
+  const following = deadlineLines.find((line) => allLines.indexOf(line) > position);
+  if (following) return following;
+  const preceding = [...deadlineLines].reverse().find((line) => allLines.indexOf(line) < position);
+  return preceding ?? deadlineLines[0];
 }
 
 export function parseText(request: TextParseRequest): TextParseResponse | ParserFailure {
@@ -236,9 +320,9 @@ export function parseText(request: TextParseRequest): TextParseResponse | Parser
   const relevanceEvidence = audienceLine
     ? evidence('ev-relevance', audienceLine, 'user_relevance')
     : undefined;
-  const actionInputs = findActions(lines, spoken);
-  const deadlineLines = lines.filter((line) =>
-    /^(?:截止|截至|报名时间|时间|日期)|20\d{2}[-年]/.test(line),
+  const actionInputs = findActions(lines, spoken, spokenSplitIsSafe(source));
+  const deadlineLines = lines.filter(
+    (line) => /^(?:截止|截至|报名时间|时间|日期)/u.test(line) || hasDateExpression(line),
   );
   const materialsLine =
     lineFor(source, /^(?:材料|材料清单|需准备|需携带|携带)[:：]/) ??
@@ -252,7 +336,7 @@ export function parseText(request: TextParseRequest): TextParseResponse | Parser
     const inherited = actionInputs[index - 1]?.spoken?.deadline_text
       ? actionInputs[index - 1].line
       : undefined;
-    return deadlineLineForAction(line, index, deadlineLines) ?? inherited;
+    return deadlineLineForAction(line, lines, deadlineLines) ?? inherited;
   });
   const actionDeadlines = actionDeadlineLines.map((line) =>
     isoDeadline(line, request.execution_context.requested_at),
