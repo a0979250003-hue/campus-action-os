@@ -1,6 +1,15 @@
 <view class="page">
   <view class="title">设置与隐私</view>
   <view class="card">
+    <view class="row">
+      <view>数据模式</view>
+      <switch checked="{{useMock}}" bindchange="toggleMock" color="#3047b8" />
+    </view>
+    <view class="muted">当前：{{originLabel}}</view>
+    <view class="caption" wx:if="{{useMock}}">示例数据模式不需要启动后端，克隆仓库后可直接跑通全流程；页面会标注「示例数据」，不会被误当成解析结果。</view>
+    <view class="caption" wx:else>真实解析模式需要后端在运行：仓库根目录双击 start-backend.bat（或依次运行 npm run dev:ai 与 npm run dev:api）。当前地址 {{apiBaseUrl}}。</view>
+  </view>
+  <view class="card">
     <view>本地开发状态</view>
     <view class="muted">DEV_ONLY 登录；API 地址来自 app.js；客户端不保存模型密钥。</view>
   </view>

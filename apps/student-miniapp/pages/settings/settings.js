@@ -1,7 +1,29 @@
 const api = require('../../utils/api');
 
 Page({
-  data: { exporting: false, error: '' },
+  data: { exporting: false, error: '', useMock: false, originLabel: '', apiBaseUrl: '' },
+  onShow() {
+    this.refreshMode();
+  },
+  refreshMode() {
+    const useMock = api.isMockMode();
+    this.setData({
+      useMock,
+      originLabel: useMock ? '本地示例数据（不连接后端）' : '真实解析服务',
+      apiBaseUrl: getApp().globalData.apiBaseUrl,
+    });
+  },
+  toggleMock(event) {
+    const useMock = Boolean(event.detail.value);
+    const app = getApp();
+    app.globalData.useMock = useMock;
+    wx.setStorageSync('useMock', useMock);
+    this.refreshMode();
+    wx.showToast({
+      title: useMock ? '已切换为示例数据' : '已切换为真实解析',
+      icon: 'none',
+    });
+  },
   exportData() {
     wx.showModal({
       title: '导出本地数据',

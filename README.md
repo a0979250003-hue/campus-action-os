@@ -41,6 +41,14 @@ npm run dev:api
 
 Windows PowerShell 可运行 `powershell -ExecutionPolicy Bypass -File scripts/verify-start.ps1` 验证启动；该脚本会用合成通知实际跑一次 API→AI 解析链，持续启动使用 `scripts/start-dev.ps1`。API 默认监听 `http://localhost:3000`，AI 默认监听 `http://localhost:3001`，可访问 `/health` 和 `/v1/capabilities`。
 
+## 运行微信小程序
+
+微信开发者工具「导入项目」，目录选择 `apps/student-miniapp` 即可 —— 该目录自带 `project.config.json`（AppID 为测试号 `touristappid`，`setting.urlCheck: false` 已等价关闭域名校验），无需额外配置。
+
+默认 `globalData.useMock = true`，**不启动任何后端**就能跑通首页 → 导入 → 解析 → 行动结果 → 任务 → 证据全流程；此时页面会显示「示例数据 · 不是解析结果」横幅，用于区分示例内容与真实解析结果。
+
+需要真实解析结果时：Windows 双击仓库根目录的 `start-backend.bat`（其他平台依次运行 `npm run dev:ai`、`npm run dev:api`），再在小程序里进「我的 → 设置 → 数据模式」把开关切到真实解析服务。切换结果写入本地存储并跨启动生效。
+
 复制 `.env.example` 为 `.env.local` 仅供服务端使用。local、test、demo、production 配置和密钥管理必须分离；小程序构建上下文不读取模型密钥。
 
 ## 质量命令

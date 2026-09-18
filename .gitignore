@@ -36,3 +36,7 @@ pnpm-debug.log*
 local-models/
 **/local-models/
 .venv-audio/
+
+# WeChat DevTools per-machine settings; not project state.
+**/project.private.config.json
+**/.wechat-devtools/
